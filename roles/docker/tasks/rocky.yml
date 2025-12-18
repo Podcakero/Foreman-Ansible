@@ -1,0 +1,123 @@
+- name: Add Docker-CE RHEL Repository
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/rhel/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: "0644"
+    owner: root
+    group: root
+  when:
+    - ansible_facts['distribution'] == "Rocky"
+
+- name: Install Docker Packages
+  ansible.builtin.dnf:
+    state: present
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+
+- name: Add Docker TCP Socket
+  block:
+    - name: Add docker.service.d folder
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: '0644'
+        owner: 'root'
+        group: 'root'
+    - name: Apply Docker service override
+      ansible.builtin.template:
+        src: docker.override.conf.j2
+        dest: /etc/systemd/system/docker.service.d/override.conf
+        mode: '0644'
+        owner: 'root'
+        group: 'root'
+
+- name: Enable and Start Docker Socket
+  ansible.builtin.systemd:
+    name: docker.socket
+    state: started
+    enabled: true
+
+- name: Download Periphery Install Script
+  ansible.builtin.get_url:
+    dest: /tmp/setup-periphery.sh
+    force: true
+    mode: '0770'
+    url: https://raw.githubusercontent.com/moghtech/komodo/main/scripts/setup-periphery.py
+
+- name: Install Komodo Periphery
+  ansible.builtin.command:
+    chdir: /tmp/
+    cmd: cat setup-periphery.sh | python3
+    creates: /etc/systemd/system/periphery.service
+
+- name: Configure Komodo Periphery
+  ansible.builtin.template:
+    src: periphery.config.toml.j2
+    dest: /etc/komodo/periphery.config.toml
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Enable and Start Komodo Periphery
+  ansible.builtin.systemd_service:
+    name: periphery.service
+    state: started
+    enabled: true
+
+- name: Check if server exists in Komodo
+  ansible.builtin.uri:
+    url: https://komodo.podcake.net/read
+    method: "POST"
+    headers:
+      Content-Type: application/json
+      X-Api-Key: "{{ komodo_api_key }}"
+      X-Api-Secret: "{{ komodo_api_secret }}"
+    body:
+      type: "GetServer"
+      params:
+        server: "{{ ansible_host }}"
+    body_format: "json"
+    status_code: [200, 500]
+  register: docker_result
+
+- name: Add server to Komodo
+  ansible.builtin.uri:
+    url: https://komodo.podcake.net/write
+    method: "POST"
+    headers:
+      Content-Type: application/json
+      X-Api-Key: "{{ komodo_api_key }}"
+      X-Api-Secret: "{{ komodo_api_secret }}"
+    body:
+      type: "CreateServer"
+      params:
+        name: "{{ ansible_host }}"
+        config:
+          address: "https://{{ ansible_host }}.podcake.net:8120"
+          enabled: true
+    body_format: "json"
+  when:
+    - docker_result.status == 500
+
+- name: Update server on Komodo
+  ansible.builtin.uri:
+    url: https://komodo.podcake.net/write
+    method: "POST"
+    headers:
+      Content-Type: application/json
+      X-Api-Key: "{{ komodo_api_key }}"
+      X-Api-Secret: "{{ komodo_api_secret }}"
+    body:
+      type: "UpdateServer"
+      params:
+        id: "{{ ansible_host }}"
+        config:
+          address: "https://{{ ansible_host }}.podcake.net:8120"
+          enabled: true
+    body_format: "json"
+  when:
+    - docker_result.status == 200

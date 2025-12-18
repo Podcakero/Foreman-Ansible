@@ -1,0 +1,14 @@
+- name: Run Rocky-based tasks
+  ansible.builtin.import_tasks: rocky.yml
+  when:
+    - ansible_facts['distribution'] == "Rocky"
+
+- name: Run Debian-based tasks
+  ansible.builtin.import_tasks: debian.yml
+  when:
+    - ansible_facts['distribution'] == "Debian"
+
+- name: Run Ubuntu-based tasks
+  ansible.builtin.import_tasks: ubuntu.yml
+  when:
+    - ansible_facts['distribution'] == "Ubuntu"

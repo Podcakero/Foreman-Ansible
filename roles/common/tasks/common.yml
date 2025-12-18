@@ -1,0 +1,78 @@
+- name: Download NetData Install Script
+  ansible.builtin.get_url:
+    dest: /tmp/kickstart.sh
+    force: true
+    mode: '0770'
+    url: https://get.netdata.cloud/kickstart.sh
+
+- name: Install NetData
+  ansible.builtin.command:
+    chdir: /tmp/
+    argv:
+      - netdata.sh
+      - --non-interactive
+      - --disable-telemetry
+      - --stable-channel
+      - --claim-token "{{ netdata_claim_token }}"
+      - --claim-rooms "{{ netdata_room_token }}"
+      - --claim-url "https://app.netdata.cloud"
+    creates: /usr/sbin/netdata
+
+- name: Configure Netdata
+  ansible.builtin.template:
+    src: netdata.conf.j2
+    dest: /etc/netdata/netdata.conf
+    mode: "0644"
+    owner: "root"
+    group: "root"
+
+- name: Restart NetData service
+  ansible.builtin.systemd_service:
+    state: restarted
+    name: netdata.service
+
+- name: Apply Glances API Web Server service
+  ansible.builtin.template:
+    src: glances-api.service.j2
+    dest: /etc/systemd/system/glances-api.service
+    mode: "0644"
+    owner: "root"
+    group: "root"
+
+- name: Enable and Start Glances API Web Server
+  ansible.builtin.systemd_service:
+    state: started
+    enabled: true
+    name: glances-api.service
+
+- name: Create ACME Client Certificate Automation
+  ansibleguy.opnsense.acme_action:
+    firewall: "{{ opnsense_ip }}"
+    api_key: "{{ opnsense_api_key }}"
+    api_port: 444
+    api_secret: "{{ opnsense_api_secret }}"
+    ssl_verify: false
+    name: "Update certificate on {{ ansible_hostname }}.podcake.net"
+    enabled: true
+    type: configd_upload_sftp
+    sftp_host: "{{ ansible_hostname }}.podcake.net"
+    sftp_user: root
+    sftp_identity_type: rsa
+    sftp_remote_path: "/etc/pki/tls/certs"
+
+- name: Create ACME Client Certificate
+  ansibleguy.opnsense.acme_certificate:
+    firewall: "{{ opnsense_ip }}"
+    api_key: "{{ opnsense_api_key }}"
+    api_port: 444
+    api_secret: "{{ opnsense_api_secret }}"
+    ssl_verify: false
+    name: "{{ ansible_hostname }}.podcake.net"
+    enabled: true
+    description: "{{ ansible_hostname }}.podcake.net Certificate created by Ansible Semaphore"
+    account: "Greyson"
+    validation: "Cloudflare"
+    auto_renewal: true
+    renew_interval: 60
+    restart_actions:
+      - "Update certificate on {{ ansible_hostname }}.podcake.net"

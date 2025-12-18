@@ -1,0 +1,4 @@
+- name: Run Rocky-based tasks
+  ansible.builtin.import_tasks: rocky.yml
+  when:
+    - ansible_facts['distribution'] == "Rocky"
