@@ -9,7 +9,7 @@
   ansible.builtin.command:
     chdir: /tmp/
     argv:
-      - kickstart.sh
+      - /tmp/kickstart.sh
       - --non-interactive
       - --disable-telemetry
       - --stable-channel
