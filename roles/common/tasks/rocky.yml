@@ -1,2 +1,2 @@
-- name: Run tasks for all_distros
+- name: Run common tasks
   ansible.builtin.import_tasks: common.yml
